@@ -54,7 +54,7 @@ def der (c: Char, r: Rexp) : Rexp = r match {
   case STAR(r1)         => SEQ(der(c, r1), STAR(r1))
   case RANGE(s)         => if (s.contains(c)) ONE else ZERO
   case PLUS(r)          => SEQ(der(c, r), STAR(r)) // Ok
-  case OPTIONAL(r)      => der(c, r) //Ok
+  case OPTIONAL(r)      => ALT(ONE, der(c, r)) //Ok
   case NTIMES(r, i)     => if (i == 0) ZERO else SEQ(der(c, r), NTIMES(r, i - 1))  //Ok
   case FROM(r, i)       => if (i == 0) FROM(r, i) else SEQ(der(c, r), FROM(r, i - 1)) // BROKEN
   case UPTO(r, i)       => if (i == 0) ZERO else SEQ(der(c, r), UPTO(r, i - 1)) //Ok
@@ -78,6 +78,7 @@ simp(der('b', OPTIONAL(CHAR('a'))))
 simp(der('a', OPTIONAL(SEQ(CHAR('a'), CHAR('b')))))
 simp(der('b', OPTIONAL(SEQ(CHAR('a'), CHAR('b')))))
 simp(der('a', OPTIONAL(ALT(CHAR('a'), CHAR('b')))))
+simp(der('a', OPTIONAL(ZERO)))
 simp(der('a', NTIMES(OPTIONAL(CHAR('a')), 3)))
 
 /* Derivative Test Cases */
