@@ -1,3 +1,11 @@
+/* 
+ * Author: John Pham
+ * Written: 8 October 2019
+ * Institution: King's College London
+ * Course: Compilers & Formal Languages
+*/
+
+/* Constructors */
 abstract class Rexp
 case object ZERO extends Rexp          
 case object ONE extends Rexp                   
@@ -15,6 +23,39 @@ case class BETWEEN(r: Rexp, n: Int, m: Int) extends Rexp
 case class NOT(r: Rexp) extends Rexp 
 case class CFUN(f: Char => Boolean) extends Rexp
 
+/* Functions for CFUN Constructor */
+def a(c: Char) : Boolean = c match {
+  case 'a'            => true
+  case _              => false
+}
+
+def emailChars(c: Char) : Boolean = {
+
+  val alphabet = ('a' to 'z').toList;
+  val numbers = ('0' to '9').toList;
+  val symbols = List('_', '.', '-');
+
+  if (alphabet.contains(c)) return true;
+  if (numbers.contains(c)) return true;
+  if (symbols.contains(c)) return true;
+
+  return false;
+
+}
+
+def emailChars2(c: Char) : Boolean = {
+
+  val alphabet = ('a' to 'z').toList;
+  val symbols = List('.');
+
+  if (alphabet.contains(c)) return true;
+  if (symbols.contains(c)) return true;
+
+  return false;
+}
+
+
+/* True if empty string matches regex r */
 def nullable(r: Rexp) : Boolean = r match {
   case ZERO             => false
   case ONE              => true
@@ -29,22 +70,27 @@ def nullable(r: Rexp) : Boolean = r match {
   case UPTO(r, _)       => true
   case FROM(r, i)       => if (i == 0) true else nullable(r)
   case BETWEEN(r, i, _) => if (i == 0) true else nullable(r)
-  case NOT(r)           => !nullable(r) 
+  case NOT(r)           => !nullable(r)
+  case CFUN(f)          => false
 }
 
 /* Nullable Test Cases */
-nullable(ZERO) == false
-nullable(ONE) == true
-nullable(CHAR('a')) == false
-nullable(ALT(CHAR('a'), CHAR('b'))) == false
-nullable(ALT(ONE, CHAR('a'))) == true
-nullable(ALT(ZERO, CHAR('b'))) == false
-nullable(ALT(SEQ(CHAR('a'), CHAR('b')), CHAR('a'))) == false
-nullable(ALT(ALT(CHAR('a'), ONE), CHAR('a'))) == true
-nullable(STAR(CHAR('a'))) == true
-nullable(STAR(SEQ(CHAR('a'), CHAR('b'))))
+nullable(ZERO) == false                                       // nullable() = false
+nullable(ONE) == true                                         // nullable([]) = true 
+nullable(CHAR('a')) == false                                  // nullable(a) = false
+nullable(ALT(CHAR('a'), CHAR('b'))) == false                  // nullable(a + b) = false
+nullable(ALT(ONE, CHAR('a'))) == true                         // nullable([] + a) = true
+nullable(ALT(ZERO, CHAR('b'))) == false                       // nullable( + b) = false
+nullable(ALT(SEQ(CHAR('a'), CHAR('b')), CHAR('a'))) == false  // nullable((ab) + a) = false
+nullable(ALT(ALT(CHAR('a'), ONE), CHAR('a'))) == true         // nullable((a + []) + a) = true
+nullable(STAR(CHAR('a'))) == true                             // nullable(a*) = true
+nullable(STAR(SEQ(CHAR('a'), CHAR('b')))) == true             // nullable((ab)*) = true
+nullable(RANGE(Set('a', 'b', 'c', 'd'))) == false             // nullable([a, b, c, d]) = false
+nullable(RANGE(Set('a'))) == false                            // nullable([a]) = false
+nullable(OPTIONAL(CHAR('a'))) == true                         // nullable(a?) = true
+nullable(CFUN(a)) == false                                    // nullable(a) = false
 
-
+/* Derivative of a regex r w.r.t c */
 def der (c: Char, r: Rexp) : Rexp = r match {
   case ZERO             => ZERO
   case ONE              => ZERO
@@ -60,7 +106,43 @@ def der (c: Char, r: Rexp) : Rexp = r match {
   case UPTO(r, i)       => if (i == 0) ZERO else SEQ(der(c, r), UPTO(r, i - 1)) //Ok
   case BETWEEN(r, i, j) => if (i == 0) SEQ(der(c, r), UPTO(r, j - 1)) else SEQ(der(c, r), BETWEEN(r, i - 1, j - 1))
   case NOT(r)           => NOT(der(c, r))
+  case CFUN(f)          => if (f(c)) ONE else ZERO // OK
 }
+
+/* Simplifies expressions where possible */
+def simp(r: Rexp) : Rexp = r match {
+  case ALT(r1, r2) => (simp(r1), simp(r2)) match {
+    case (ZERO, r2s) => r2s
+    case (r1s, ZERO) => r1s
+    case (r1s, r2s) => if (r1s == r2s) r1s else ALT (r1s, r2s)
+  }
+  case SEQ(r1, r2) =>  (simp(r1), simp(r2)) match {
+    case (ZERO, _) => ZERO
+    case (_, ZERO) => ZERO
+    case (ONE, r2s) => r2s
+    case (r1s, ONE) => r1s
+    case (r1s, r2s) => SEQ(r1s, r2s)
+  }
+  case r => r
+}
+
+/* Derivative w.r.t characters in string s */
+def ders (s: List[Char], r: Rexp) : Rexp = s match {
+  case Nil => r
+  case c::s => ders(s, simp(der(c, r)))
+}
+
+/* True if string s matches regex r */
+def matcher(r: Rexp, s: String) : Boolean = nullable(ders(s.toList, r))
+
+der('c', CFUN(a))
+der('b', CFUN(a))
+der('a', CFUN(a))
+
+der('c', CFUN(aOrB))
+der('b', CFUN(aOrB))
+der('a', CFUN(aOrB))
+
 
 simp(der('a', BETWEEN(SEQ(CHAR('a'), CHAR('b')), 2, 3)))
 simp(der('b', BETWEEN(SEQ(CHAR('a'), CHAR('b')), 2, 3)))
@@ -109,30 +191,7 @@ der('b', FROM(SEQ(CHAR('a'), CHAR('b')), 2))
 
 der('b', FROM(SEQ(CHAR('a'), CHAR('b')), 1))
 
-def simp(r: Rexp) : Rexp = r match {
-  case ALT(r1, r2) => (simp(r1), simp(r2)) match {
-    case (ZERO, r2s) => r2s
-    case (r1s, ZERO) => r1s
-    case (r1s, r2s) => if (r1s == r2s) r1s else ALT (r1s, r2s)
-  }
-  case SEQ(r1, r2) =>  (simp(r1), simp(r2)) match {
-    case (ZERO, _) => ZERO
-    case (_, ZERO) => ZERO
-    case (ONE, r2s) => r2s
-    case (r1s, ONE) => r1s
-    case (r1s, r2s) => SEQ(r1s, r2s)
-  }
-  case r => r
-}
 
-
-
-def ders (s: List[Char], r: Rexp) : Rexp = s match {
-  case Nil => r
-  case c::s => ders(s, simp(der(c, r)))
-}
-
-def matcher(r: Rexp, s: String) : Boolean = nullable(ders(s.toList, r))
 
 /* Tests as given in Coursework Handout */
 matcher(NTIMES(CHAR('a'), 3), "") == false
@@ -170,11 +229,24 @@ matcher(BETWEEN(CHAR('a'), 3, 5), "aaa") == true
 matcher(BETWEEN(CHAR('a'), 3, 5), "aaaa") == true
 matcher(BETWEEN(CHAR('a'), 3, 5), "aaaaa") == true
 
+matcher(BETWEEN(CFUN(a), 3, 5), "") == false
+matcher(BETWEEN(CFUN(a), 3, 5), "a") == false
+matcher(BETWEEN(CFUN(a), 3, 5), "aa") == false
+matcher(BETWEEN(CFUN(a), 3, 5), "aaa") == true
+matcher(BETWEEN(CFUN(a), 3, 5), "aaaa") == true
+matcher(BETWEEN(CFUN(a), 3, 5), "aaaaa") == true
+
 matcher(BETWEEN(OPTIONAL(CHAR('a')), 3, 5), "") == true
 matcher(BETWEEN(OPTIONAL(CHAR('a')), 3, 5), "a") == true
 matcher(BETWEEN(OPTIONAL(CHAR('a')), 3, 5), "aa") == true
 matcher(BETWEEN(OPTIONAL(CHAR('a')), 3, 5), "aaa") == true
 matcher(BETWEEN(OPTIONAL(CHAR('a')), 3, 5), "aaaa") == true
 matcher(BETWEEN(OPTIONAL(CHAR('a')), 3, 5), "aaaaa") == true
+
+/* Email Address Regular Expression */
+val emailRegex = SEQ(PLUS(CFUN(emailChars)), SEQ(CHAR('@'), SEQ(PLUS(CFUN(emailChars)), SEQ(CHAR('.'), BETWEEN(CFUN(emailChars2), 2, 6)))))
+
+matcher(emailRegex, "jdcpham_.@outlook.co_m");
+matcher(emailRegex, "jdcpham@outlook.com");
 
 
